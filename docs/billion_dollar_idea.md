@@ -4,212 +4,149 @@ Hi I am Ankan the founder and probably still the core maintainer of the project.
 
 Good luck to myself!
 
+# NATS-Based Workflow System Design
 
-### **Final Design: Merging Block and Workflow Logic**
+## 1. System Overview
 
-In this final system design, we merge the concepts of **blocks** and **workflows** into a cohesive, process-like execution model where each workflow consists of a sequence of blocks. Each workflow can be treated as a standalone unit of execution, with individual blocks acting as stages within the workflow. The system behaves like a high-level **Operating System (OS)**, where workflows are treated as processes, and blocks are managed within the workflow as subprocesses.
+In this redesigned system, each block within a workflow operates as a mini NATS client. This approach allows for a more distributed, event-driven architecture where blocks can communicate and coordinate their actions through NATS subjects and messages.
 
----
+## 2. Core Components
 
-### **1. Core Concepts: Unified Workflow-Block System**
+### 2.1 NATS Server
+- Acts as the central message broker for the entire system.
+- Handles pub-sub and request-reply patterns for inter-block communication.
 
-#### **Unified Workflow-Block Entity**
-- The **workflow** and its constituent **blocks** are now considered as a unified entity where blocks represent the sequential stages of a process, and workflows manage these blocks collectively.
-- **Workflows** are dynamic processes, and each workflow consists of **one or more blocks**.
-- Each workflow has its own **control structure**, containing necessary metadata and state tracking for both the overall workflow and the blocks within it.
+### 2.2 Workflow Manager
+- Parses user-provided JSON configurations.
+- Creates and manages Workflow Control Blocks (WCBs).
+- Initiates workflow execution by publishing a message to NATS.
 
-### **2. Execution Engine Overview**
+### 2.3 Block Executor
+- A lightweight runtime that hosts individual blocks.
+- Subscribes to NATS subjects for block execution requests.
+- Executes block logic and publishes results back to NATS.
 
-The execution engine manages both workflows and blocks. It schedules them for execution, coordinates communication between blocks, and ensures correct flow control.
+### 2.4 Scheduler
+- Monitors workflow progress through NATS messages.
+- Manages resource allocation and block execution order.
+- Handles parallel execution and dependencies between blocks.
 
-#### **Execution Engine Architecture**
-1. **Workflow Manager**: Responsible for starting, pausing, stopping, and managing the overall lifecycle of workflows.
-2. **Block Processor**: Executes individual blocks inside the workflow.
-3. **Scheduler**: Responsible for scheduling workflows, preempting them if necessary, and handling dependencies between blocks.
-4. **IPC (Inter-Process Communication)**: Manages communication between blocks of different workflows.
+## 3. Block Design
 
----
-
-### **3. Workflow Control Block (WCB)**
-
-The **Workflow Control Block (WCB)** serves as the central control unit for each workflow. It contains metadata, state, and execution details for both the workflow and its blocks.
-
-#### **Structure of WCB**
+Each block is now designed as a mini NATS client with the following characteristics:
 
 ```typescript
-interface WorkflowControlBlock {
-  id: string;               // Unique workflow ID
-  type: 'fetch' | 'html-scraper' | 'hook' | 'response';  // Workflow type
-  state: 'READY' | 'RUNNING' | 'BLOCKED' | 'COMPLETED';  // Workflow state
-  blocks: BlockControlObject[];  // List of blocks to execute in sequence
-  input: any;                // Input data for the first block in the workflow
-  output: any;               // Final output after all blocks are executed
-  currentBlockIndex: number;  // Index of the currently executing block
-  dependencies: string[];     // Dependencies on other workflows or blocks
-  priority: number;           // Priority level of the workflow
-  createdAt: Date;            // Creation time
-  updatedAt: Date;            // Last updated timestamp
+interface NATSBlock {
+  id: string;
+  type: 'fetch' | 'html-scraper' | 'hook' | 'response';
+  execute: (input: any) => Promise<any>;
+  inputSubject: string;
+  outputSubject: string;
+  errorSubject: string;
+  natsClient: NATS.Client;
 }
 ```
 
-The **WCB** keeps track of the workflow’s execution state, manages transitions between blocks, and coordinates inputs/outputs between them.
+## 4. Workflow Execution Flow
 
----
-
-### **4. Block Control Object (BCO)**
-
-Each **block** within a workflow is represented by a **Block Control Object (BCO)**. This object manages individual blocks (like processes within a workflow) and handles block-specific execution logic.
-
-#### **Structure of BCO**
-
-```typescript
-interface BlockControlObject {
-  type: 'fetch' | 'html-scraper' | 'hook' | 'response';  // Block type
-  input: any;              // Input to the block (can come from previous block or user-defined)
-  output: any;             // Output from the block to be passed to the next block or workflow
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';  // Execution status of the block
-  retries: number;         // Number of retries in case of failure
-  dependencies: string[];  // Dependencies on other blocks
-}
-```
-
-- **Execution Order**: Blocks execute sequentially within a workflow, but can also execute in parallel if needed, depending on block type and dependencies.
-
----
-
-### **5. Unified Execution Flow**
-
-#### **Execution Model**
-
-1. **Workflow Initialization**: 
-   - The user provides a JSON configuration defining the workflow and its blocks.
-   - The **Workflow Manager** parses this JSON, creating a **Workflow Control Block (WCB)** that contains all blocks as **Block Control Objects (BCO)**.
+1. **Workflow Initialization**:
+   - User submits JSON configuration.
+   - Workflow Manager creates a WCB and publishes a workflow start message to NATS.
 
 2. **Block Execution**:
-   - The **Block Processor** picks blocks from the workflow (starting with the first) and executes them based on their type.
-   - **Input Data**: Each block can either:
-     - Receive input from a predefined value (user-defined in the JSON), or
-     - Take the output from a previous block.
-   - **Block Types**: Depending on the block type, different actions are performed (e.g., `fetch`, `html-scraper`, `response`).
+   - Each block subscribes to its input subject.
+   - When a message is received on the input subject, the block executes its logic.
+   - Upon completion, the block publishes its output to the next block's input subject.
 
-3. **Parallel Execution**:
-   - If a workflow has blocks that can run in parallel, the **Scheduler** assigns resources to these blocks accordingly.
-   - The **Scheduler** handles CPU and memory allocation, making sure blocks do not compete for the same resources (to avoid race conditions).
+3. **Inter-Block Communication**:
+   - Blocks communicate exclusively through NATS subjects.
+   - The output of one block becomes the input for the next block in the workflow.
 
-4. **Block Chaining**:
-   - Once a block completes, its **output** is passed to the next block.
-   - If the block depends on another workflow or block (using IPC), the **Scheduler** ensures that the dependency is met before proceeding.
+4. **Error Handling**:
+   - If a block encounters an error, it publishes to its error subject.
+   - The Scheduler subscribes to all error subjects and can trigger retries or alternative flows.
 
 5. **Workflow Completion**:
-   - The **Scheduler** monitors all blocks in the workflow. Once all blocks are executed, the workflow enters the **COMPLETED** state.
+   - The final block in the workflow publishes a completion message.
+   - The Workflow Manager receives this message and marks the workflow as complete.
 
----
+## 5. NATS Subject Structure
 
-### **6. Scheduler (Inspired by OS Scheduling)**
+- Workflow subjects: `workflow.<workflow_id>.<action>`
+  - Example: `workflow.123.start`, `workflow.123.complete`
+- Block subjects: `block.<block_id>.<action>`
+  - Example: `block.fetch_1.input`, `block.fetch_1.output`, `block.fetch_1.error`
 
-The **Scheduler** ensures smooth and efficient execution of workflows and their blocks, inspired by OS-like scheduling policies.
+## 6. Advantages of NATS-Based Design
 
-#### **Features**:
-- **Round-Robin Scheduling**: To ensure fair resource allocation, workflows are scheduled using round-robin, especially useful when multiple workflows compete for resources.
-- **Priority Scheduling**: Workflows with higher priorities (e.g., time-sensitive tasks) get scheduled before lower-priority workflows.
-- **Preemption**: If a block takes too long, it can be preempted by the Scheduler, freeing resources for other workflows.
+1. **Scalability**: Easy to scale horizontally by adding more Block Executors.
+2. **Fault Tolerance**: If a Block Executor fails, another can pick up the work.
+3. **Flexibility**: Easy to add new block types or modify existing ones.
+4. **Real-time Monitoring**: Use NATS streaming to monitor workflow progress in real-time.
+5. **Load Balancing**: NATS can automatically load balance requests across multiple Block Executors.
 
----
+## 7. Implementation Considerations
 
-### **7. Resource Management**
+1. **NATS Client Libraries**: Use official NATS client libraries for Node.js/TypeScript.
+2. **Block Isolation**: Each Block Executor runs in its own process for isolation.
+3. **State Management**: Use NATS JetStream for persisting workflow state.
+4. **Security**: Implement NATS authentication and encryption for secure communication.
+5. **Monitoring**: Utilize NATS monitoring capabilities for system health checks.
 
-#### **Memory Management**
-- **Isolated Memory**: Each workflow has isolated memory for its execution to avoid memory collisions. Blocks share memory only with their workflow.
-- **Shared Memory**: If two workflows need to exchange data, the Scheduler manages the shared memory space.
-  
-#### **CPU Scheduling**
-- **Multithreading/Multiprocessing**: Workflows are executed in parallel using either multithreading (for lightweight workflows) or multiprocessing (for heavy tasks that need process isolation).
+## 8. Example: Fetch Block Implementation
 
----
+```typescript
+import * as NATS from 'nats';
 
-### **8. Error Handling and Recovery**
+class FetchBlock implements NATSBlock {
+  id: string;
+  type: 'fetch';
+  inputSubject: string;
+  outputSubject: string;
+  errorSubject: string;
+  natsClient: NATS.Client;
 
-#### **Error Management**
-- If a block fails (e.g., network failure in a `fetch` block), the system can:
-  - **Retry**: Attempt the block again after a delay.
-  - **Skip**: Move to the next block if skipping is acceptable.
-  - **Fail Workflow**: Mark the entire workflow as failed if critical blocks fail.
-
-#### **Fault Tolerance**
-- **Workflow Isolation**: Errors in one workflow do not affect other running workflows. Each workflow is isolated in its own execution context.
-
----
-
-### **9. Example Workflow Execution**
-
-Given the JSON configuration:
-
-```json
-[
-  {
-    "type": "hook",
-    "path": "test"
-  },
-  {
-    "type": "fetch",
-    "parameter": {
-      "url": "https://localhost:4000"
-    }
-  },
-  {
-    "type": "html-scraper",
-    "parameter": [
-      {
-        "tags": "h1",
-        "limit": 5
-      },
-      {
-        "tags": "h2",
-        "limit": 5
-      }
-    ]
-  },
-  {
-    "type": "response",
-    "header": [
-      {
-        "content-type": "json"
-      }
-    ],
-    "body": "{}"
+  constructor(id: string, natsClient: NATS.Client) {
+    this.id = id;
+    this.type = 'fetch';
+    this.inputSubject = `block.${id}.input`;
+    this.outputSubject = `block.${id}.output`;
+    this.errorSubject = `block.${id}.error`;
+    this.natsClient = natsClient;
   }
-]
+
+  async execute(input: any): Promise<any> {
+    try {
+      const response = await fetch(input.url);
+      const data = await response.text();
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async start() {
+    const subscription = this.natsClient.subscribe(this.inputSubject);
+    for await (const msg of subscription) {
+      try {
+        const input = JSON.parse(msg.data.toString());
+        const output = await this.execute(input);
+        await this.natsClient.publish(this.outputSubject, JSON.stringify(output));
+      } catch (error) {
+        await this.natsClient.publish(this.errorSubject, JSON.stringify(error));
+      }
+    }
+  }
+}
 ```
 
-1. **Step 1**: The **Workflow Manager** parses the JSON file and generates a **WCB** with four **BCOs** for each block (`hook`, `fetch`, `html-scraper`, `response`).
+This redesign transforms each block into a mini NATS client, creating a more distributed and event-driven system. Here are some key points about the new design:
 
-2. **Step 2**: The Scheduler starts executing the **`hook`** block, which triggers an internal function.
+- Distributed Architecture: Each block now operates independently as a NATS client, allowing for better scalability and fault tolerance.
+- Event-Driven Communication: Blocks communicate through NATS subjects, using publish-subscribe patterns for workflow execution.
+- Scalability: The system can easily scale horizontally by adding more Block Executors, as NATS handles load balancing.
+- Flexibility: New block types can be added easily by implementing the NATSBlock interface and subscribing to the appropriate subjects.
+- Real-time Monitoring: NATS streaming capabilities allow for real-time monitoring of workflow progress.
+- Fault Tolerance: If a Block Executor fails, another can pick up the work, improving system reliability.
+- State Management: NATS JetStream can be used for persisting workflow state, making the system more robust.
 
-3. **Step 3**: The **`fetch`** block is executed next, making an HTTP request. While waiting for the response, the workflow enters the **BLOCKED** state.
-
-4. **Step 4**: Once the `fetch` block completes, the **`html-scraper`** block processes the fetched HTML to extract data.
-
-5. **Step 5**: Finally, the **`response`** block formats and returns the result.
-
-6. **Step 6**: The workflow finishes execution and transitions to **COMPLETED**.
-
----
-
-### **10. Tech Stack**
-
-- **Backend**:
-  - **Node.js** (for handling async tasks, I/O, and concurrency).
-  - **TypeScript** (for type safety and scalability).
-  - **Redis** (for shared memory/IPC between workflows).
-  
-- **Parallel Execution**:
-  - **Worker Threads** or **Cluster API** in Node.js for multithreading/multiprocessing.
-
----
-
-### **11. High-Level System Flow**
-
-1. **User Input**: The user provides a JSON configuration file defining workflows and blocks.
-2. **Workflow Manager**: The system parses the input, creates a **WCB** and associated **BCOs**, and hands it off to the Scheduler.
-3. **Scheduler**: The Scheduler orchestrates the parallel execution of workflows, ensuring efficient resource management and IPC.
-4. **Block Execution**: Blocks

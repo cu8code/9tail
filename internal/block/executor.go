@@ -33,6 +33,11 @@ func (br *BlockRegistry) Start() {
 
 	// Subscribe to block registration subject
 	_, err := br.nc.Subscribe(br.subject, func(msg *nats.Msg) {
+		if len(msg.Data) == 0 { // Check for get all blocks request
+			br.handleGetAllBlocks(msg)
+			return
+		}
+
 		blockType := string(msg.Data[:])
 		log.Printf("Received block registration request for type %s\n", blockType)
 
@@ -40,11 +45,35 @@ func (br *BlockRegistry) Start() {
 		br.RegisterBlock(blockType, msg.Reply)
 
 		log.Printf("Block type %s registered with subject %s\n", blockType, msg.Reply)
+		log.Printf("Replying to %s\n", msg.Reply)
+		br.nc.Publish(msg.Reply, []byte("Registered"))
 	})
 
 	if err != nil {
 		log.Println("Error starting block registry listener:", err)
 	}
+
+	// Subscribe to get all blocks subject
+	getAllSubject := br.subject + ".getall"
+	_, err = br.nc.Subscribe(getAllSubject, br.handleGetAllBlocks)
+	if err != nil {
+		log.Println("Error subscribing to get all blocks subject:", err)
+	}
+}
+
+func (br *BlockRegistry) handleGetAllBlocks(msg *nats.Msg) {
+	log.Println("Received request for all registered blocks")
+
+	// Marshal blocks into JSON
+	blocksJSON, err := json.Marshal(br.blocks)
+	if err != nil {
+		log.Println("Error marshalling blocks to JSON:", err)
+		br.nc.Publish(msg.Reply, []byte("Error marshalling blocks"))
+		return
+	}
+
+	br.nc.Publish(msg.Reply, blocksJSON)
+	log.Println("Sent all registered blocks")
 }
 
 type Executor struct {

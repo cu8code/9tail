@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/nats-io/nats.go"
 )
@@ -41,14 +42,6 @@ func (s *Server) Start() {
 	log.Fatal(http.ListenAndServe(":8080", s.mux))
 }
 
-func randomNumberHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("NATS-based Workflow System - HTTP Server"))
-}
-
-func getBlocksHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Blocks endpoint"))
-}
-
 func (s *Server) createBlockHandler(w http.ResponseWriter, r *http.Request) {
 	var blockReq BlockRequest
 	err := json.NewDecoder(r.Body).Decode(&blockReq)
@@ -70,10 +63,28 @@ func (s *Server) createBlockHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Block created"))
 }
 
+func (s *Server) getAllBlocksHandler(w http.ResponseWriter, r *http.Request) {
+	// Request all blocks from NATS
+	msg, err := s.nc.Request("block.registry.getall", nil, 2*time.Second)
+	if err != nil {
+		log.Printf("Error requesting blocks: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if message data is not empty
+	if len(msg.Data) == 0 {
+		http.Error(w, "No blocks found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(msg.Data)
+}
+
 func StartHTTPServer(nc *nats.Conn) {
 	server := NewServer(nc)
-	server.AddRoute("/api", randomNumberHandler, http.MethodGet)
-	server.AddRoute("/api/blocks", getBlocksHandler, http.MethodGet)
 	server.AddRoute("/api/blocks/new", server.createBlockHandler, http.MethodPost)
+	server.AddRoute("/api/blocks/all", server.getAllBlocksHandler, http.MethodGet)
 	server.Start()
 }

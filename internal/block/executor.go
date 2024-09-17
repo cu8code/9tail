@@ -42,8 +42,23 @@ func (e *Executor) handleBlockExecution(msg *nats.Msg) {
 		return
 	}
 
-	ctx := workflow.NewWorkflowContext(workflowID, e.nc)
-	e.loadWorkflowContext(ctx)
+	var js, jserr = e.nc.JetStream()
+	if jserr != nil {
+		log.Printf("Error connecting to JetStream: %v", jserr)
+		return
+	}
+	var store, store_err = js.KeyValue("workflow_contexts")
+	if store_err != nil {
+		log.Printf("Error getting Key-Value store: %v", store_err)
+		return
+	}
+
+	ctx := workflow.NewWorkflowContext(workflowID, e.nc, store)
+	ero := e.loadWorkflowContext(ctx)
+	if ero != nil {
+		log.Printf("Error loading workflow context: %v", ero)
+		return
+	}
 
 	block := e.createBlock(blockConfig)
 	result, err := block.Execute(blockConfig["input"], ctx)
@@ -60,23 +75,24 @@ func (e *Executor) handleBlockExecution(msg *nats.Msg) {
 	e.nc.Publish("block."+block.GetID()+".output", resultJSON)
 }
 
-func (e *Executor) loadWorkflowContext(ctx *workflow.WorkflowContext) {
+func (e *Executor) loadWorkflowContext(ctx *workflow.WorkflowContext) error {
 	msg, err := e.nc.Request(fmt.Sprintf("workflow.%s.context", ctx.ID), nil, 5*time.Second)
 	if err != nil {
 		log.Printf("Error loading workflow context: %v", err)
-		return
+		return err
 	}
 
 	var data map[string]interface{}
 	err = json.Unmarshal(msg.Data, &data)
 	if err != nil {
 		log.Printf("Error unmarshaling workflow context: %v", err)
-		return
+		return err
 	}
 
 	for k, v := range data {
 		ctx.Set(k, v)
 	}
+	return nil
 }
 
 func (e *Executor) createBlock(config map[string]interface{}) Block {

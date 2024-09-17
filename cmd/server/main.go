@@ -19,7 +19,11 @@ func main() {
 	wm := workflow.NewManager(nc)
 	s := scheduler.NewScheduler(nc)
 	be := block.NewExecutor(nc)
-	workflowContext := workflow.NewContextPublisher(nc)
+	workflowContext, err := workflow.NewContextPublisher(nc)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Start the components
 	go wm.Start()

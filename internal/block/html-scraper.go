@@ -28,7 +28,13 @@ func (h *HtmlScraperBlock) Execute(input interface{}, ctx *workflow.WorkflowCont
 		return nil, ErrInvalidInput
 	}
 
-	html, ok := inputMap["html"].(string)
+	prevId, ok := inputMap["prev"].(string)
+	if !ok {
+		return nil, ErrInvalidInput
+	}
+
+	// Retrieve HTML from the context
+	html, _, _ := ctx.Get(prevId)
 	if !ok {
 		return nil, ErrInvalidInput
 	}
@@ -38,16 +44,19 @@ func (h *HtmlScraperBlock) Execute(input interface{}, ctx *workflow.WorkflowCont
 		return nil, ErrInvalidInput
 	}
 
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	// Parse the HTML document
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html.(string)))
 	if err != nil {
 		return nil, err
 	}
 
 	var result []string
+	// Scrape HTML elements
 	doc.Find(selector).Each(func(i int, s *goquery.Selection) {
 		result = append(result, s.Text())
 	})
 
+	// Publish completion message
 	h.NatsClient.Publish("block."+h.ID+".completed", []byte("done"))
 
 	return result, nil

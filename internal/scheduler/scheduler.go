@@ -47,22 +47,19 @@ func (s *Scheduler) handleWorkflowInitiation(msg *nats.Msg) {
 			continue
 		}
 
-		// Execute block if there are no dependencies or if dependencies are already resolved
-		if dependencies, ok := blockMap["dependencies"].([]interface{}); !ok || len(dependencies) == 0 {
-			blockJSON, _ := json.Marshal(blockMap)
+		blockConfig, _ := json.Marshal(blockMap)
 
-			// Publish the block for execution
-			err = s.nc.Publish("block."+blockMap["id"].(string)+".execute", blockJSON)
-			if err != nil {
-				log.Printf("Error publishing block execution: %v", err)
-				return
-			}
+		// Publish the block for execution
+		err = s.nc.Publish("block."+blockMap["id"].(string)+".execute", blockConfig)
+		if err != nil {
+			log.Printf("Error publishing block execution: %v", err)
+			return
+		}
 
-			// Wait for the block to be completed before moving to the next one
-			if err := s.waitForBlockCompletion(blockMap["id"].(string)); err != nil {
-				log.Printf("Error waiting for block completion: %v", err)
-				return
-			}
+		// Wait for the block to be completed before moving to the next one
+		if err := s.waitForBlockCompletion(blockMap["id"].(string)); err != nil {
+			log.Printf("Error waiting for block completion: %v", err)
+			return
 		}
 	}
 }

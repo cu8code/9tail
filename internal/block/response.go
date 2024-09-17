@@ -37,5 +37,7 @@ func (r *ResponseBlock) Execute(input interface{}, ctx *workflow.WorkflowContext
 		return nil, err
 	}
 
+	r.NatsClient.Publish("block."+r.ID+".completed", []byte("done"))
+
 	return string(jsonResponse), nil
 }

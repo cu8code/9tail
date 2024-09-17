@@ -2,9 +2,10 @@ package scheduler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"time"
 
-	"github.com/cu8code/9tail/internal/workflow"
 	"github.com/nats-io/nats.go"
 )
 
@@ -17,13 +18,12 @@ func NewScheduler(nc *nats.Conn) *Scheduler {
 }
 
 func (s *Scheduler) Start() {
-	sub, err := s.nc.Subscribe("workflow.*.initiated", s.handleWorkflowInitiation)
+	_, err := s.nc.Subscribe("workflow.*.initiated", s.handleWorkflowInitiation)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer sub.Unsubscribe()
-
-	select {} // Keep the goroutine alive
+	// Keep the goroutine alive to listen for messages
+	select {}
 }
 
 func (s *Scheduler) handleWorkflowInitiation(msg *nats.Msg) {
@@ -34,35 +34,61 @@ func (s *Scheduler) handleWorkflowInitiation(msg *nats.Msg) {
 		return
 	}
 
-	workflowID, ok := wcb["id"].(string)
-	if !ok {
-		log.Printf("Invalid workflow ID in WCB")
-		return
-	}
-
-	ctx := workflow.NewWorkflowContext(workflowID, s.nc)
-
 	blocks, ok := wcb["blocks"].([]interface{})
 	if !ok {
 		log.Printf("Invalid blocks data in WCB")
 		return
 	}
 
+	// Iterate over blocks and execute them sequentially
 	for _, block := range blocks {
 		blockMap, ok := block.(map[string]interface{})
 		if !ok {
 			continue
 		}
+
+		// Execute block if there are no dependencies or if dependencies are already resolved
 		if dependencies, ok := blockMap["dependencies"].([]interface{}); !ok || len(dependencies) == 0 {
-			s.executeBlock(blockMap, ctx)
+			blockJSON, _ := json.Marshal(blockMap)
+
+			// Publish the block for execution
+			err = s.nc.Publish("block."+blockMap["id"].(string)+".execute", blockJSON)
+			if err != nil {
+				log.Printf("Error publishing block execution: %v", err)
+				return
+			}
+
+			// Wait for the block to be completed before moving to the next one
+			if err := s.waitForBlockCompletion(blockMap["id"].(string)); err != nil {
+				log.Printf("Error waiting for block completion: %v", err)
+				return
+			}
 		}
 	}
 }
 
-func (s *Scheduler) executeBlock(blockMap map[string]interface{}, ctx *workflow.WorkflowContext) {
-	blockJSON, _ := json.Marshal(blockMap)
-	err := s.nc.Publish("block."+blockMap["id"].(string)+".execute", blockJSON)
+// waitForBlockCompletion waits for a confirmation message that a block is completed
+func (s *Scheduler) waitForBlockCompletion(blockID string) error {
+	done := make(chan error)
+
+	// Subscribe to the completion event for the current block
+	sub, err := s.nc.Subscribe("block."+blockID+".completed", func(m *nats.Msg) {
+		done <- nil // Signal that the block execution is complete
+	})
 	if err != nil {
-		log.Printf("Error publishing block execution: %v", err)
+		return err
 	}
+
+	// Timeout for block execution
+	select {
+	case <-done:
+		log.Printf("Block %s execution completed", blockID)
+		// Unsubscribe after the block is completed to prevent the issue of re-subscribing
+		sub.Unsubscribe()
+	case <-time.After(30 * time.Second): // Timeout of 30 seconds
+		sub.Unsubscribe() // Unsubscribe in case of timeout
+		return fmt.Errorf("block %s execution timeout", blockID)
+	}
+
+	return nil
 }

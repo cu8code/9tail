@@ -48,5 +48,7 @@ func (h *HtmlScraperBlock) Execute(input interface{}, ctx *workflow.WorkflowCont
 		result = append(result, s.Text())
 	})
 
+	h.NatsClient.Publish("block."+h.ID+".completed", []byte("done"))
+
 	return result, nil
 }

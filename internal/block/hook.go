@@ -64,5 +64,7 @@ func (h *HookBlock) Execute(input interface{}, ctx *workflow.WorkflowContext) (i
 		return nil, err
 	}
 
+	h.NatsClient.Publish("block."+h.ID+".completed", []byte("done"))
+
 	return result, nil
 }

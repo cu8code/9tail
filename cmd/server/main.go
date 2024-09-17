@@ -19,11 +19,13 @@ func main() {
 	wm := workflow.NewManager(nc)
 	s := scheduler.NewScheduler(nc)
 	be := block.NewExecutor(nc)
+	workflowContext := workflow.NewContextPublisher(nc)
 
 	// Start the components
 	go wm.Start()
 	go s.Start()
 	go be.Start()
+	go workflowContext.Start()
 
 	log.Println("NATS-based Workflow System started")
 

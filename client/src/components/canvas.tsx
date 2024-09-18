@@ -9,7 +9,8 @@ import {
   Edge,
   Node,
   Connection,
-  MiniMap
+  MiniMap,
+  BackgroundVariant
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -52,7 +53,7 @@ const Canvas: React.FC<CanvasProps> = ({ width = '80vw', height = '95vh' }) => {
       >
         <Controls />
         <MiniMap />
-        <Background variant="dots" gap={12} size={1} />
+        <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
       </ReactFlow>
     </div>
   );

@@ -1,11 +1,15 @@
 package api
 
 import (
-	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/antlr4-go/antlr/v4"
+	"github.com/cu8code/9tail/antlr/parser"
 	"github.com/nats-io/nats.go"
 )
 
@@ -43,24 +47,54 @@ func (s *Server) Start() {
 }
 
 func (s *Server) createBlockHandler(w http.ResponseWriter, r *http.Request) {
-	var blockReq BlockRequest
-	err := json.NewDecoder(r.Body).Decode(&blockReq)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	// Check if the request method is POST
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	log.Printf("Creating block of type %s\n", blockReq.Type)
-
-	// Publish block registration request to NATS
-	err = s.nc.Publish("block.registry", []byte(blockReq.Type))
+	// Parse the multipart form data
+	err := r.ParseMultipartForm(10 << 20) // 10 MB max
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Unable to parse form", http.StatusBadRequest)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Block created"))
+	// Get the file from the form data
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Error retrieving the file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Check if the file has .ninetail extension
+	if !strings.HasSuffix(header.Filename, ".ninetail") {
+		http.Error(w, "File must have .ninetail extension", http.StatusBadRequest)
+		return
+	}
+
+	// Read the file content
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		http.Error(w, "Error reading the file", http.StatusInternalServerError)
+		return
+	}
+
+	str := string(content)
+	parser.Parse(antlr.NewInputStream(str))
+
+	// Set the response headers
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", header.Filename))
+
+	// Write the file content to the response
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(content)
+
+	if err != nil {
+		log.Printf("Error writing response: %v", err)
+	}
 }
 
 func (s *Server) getAllBlocksHandler(w http.ResponseWriter, r *http.Request) {

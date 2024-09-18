@@ -36,13 +36,6 @@ func main() {
 	registry := block.NewBlockRegistry(nc, "block.registry")
 	log.Println("Block registry initialized")
 
-	log.Println("Registering blocks...")
-	registry.RegisterBlock("fetch", "block.fetch.execute")
-	registry.RegisterBlock("html-scraper", "block.html-scraper.execute")
-	registry.RegisterBlock("hook", "block.hook.execute")
-	registry.RegisterBlock("response", "block.response.execute")
-	log.Println("Blocks registered")
-
 	log.Println("Initializing executor...")
 	executor := block.NewExecutor(nc, registry)
 	log.Println("Executor initialized")

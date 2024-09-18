@@ -1,0 +1,74 @@
+package block
+
+import (
+	"encoding/json"
+	"log"
+
+	"github.com/nats-io/nats.go"
+)
+
+type BlockRegistry struct {
+	blocks  map[string]string
+	nc      *nats.Conn
+	subject string
+}
+
+func NewBlockRegistry(nc *nats.Conn, subject string) *BlockRegistry {
+	return &BlockRegistry{
+		blocks:  make(map[string]string),
+		nc:      nc,
+		subject: subject,
+	}
+}
+
+func (br *BlockRegistry) RegisterBlock(blockType, subject string) {
+	br.blocks[blockType] = subject
+}
+
+func (br *BlockRegistry) Start() {
+	log.Println("Block registry listener started")
+
+	// Subscribe to block registration subject
+	_, err := br.nc.Subscribe(br.subject, func(msg *nats.Msg) {
+		if len(msg.Data) == 0 { // Check for get all blocks request
+			br.handleGetAllBlocks(msg)
+			return
+		}
+
+		blockType := string(msg.Data[:])
+		log.Printf("Received block registration request for type %s\n", blockType)
+
+		// Register the block
+		br.RegisterBlock(blockType, msg.Reply)
+
+		log.Printf("Block type %s registered with subject %s\n", blockType, msg.Reply)
+		log.Printf("Replying to %s\n", msg.Reply)
+		br.nc.Publish(msg.Reply, []byte("Registered"))
+	})
+
+	if err != nil {
+		log.Println("Error starting block registry listener:", err)
+	}
+
+	// Subscribe to get all blocks subject
+	getAllSubject := br.subject + ".getall"
+	_, err = br.nc.Subscribe(getAllSubject, br.handleGetAllBlocks)
+	if err != nil {
+		log.Println("Error subscribing to get all blocks subject:", err)
+	}
+}
+
+func (br *BlockRegistry) handleGetAllBlocks(msg *nats.Msg) {
+	log.Println("Received request for all registered blocks")
+
+	// Marshal blocks into JSON
+	blocksJSON, err := json.Marshal(br.blocks)
+	if err != nil {
+		log.Println("Error marshalling blocks to JSON:", err)
+		br.nc.Publish(msg.Reply, []byte("Error marshalling blocks"))
+		return
+	}
+
+	br.nc.Publish(msg.Reply, blocksJSON)
+	log.Println("Sent all registered blocks")
+}

@@ -7,9 +7,8 @@ export default function SuperPannel() {
   const [html, setHtml] = useState('');
 
   useEffect(() => {
-    const generatedHtml = createHTMLfrom9Tail(code);
-    console.log(generatedHtml);
-    
+    const parts = code.split(/^---[\s\S]*/m);
+    const generatedHtml = createHTMLfrom9Tail(parts[0] ?? "");
     setHtml(generatedHtml);
   }, [getSelectedNode, code]);
 

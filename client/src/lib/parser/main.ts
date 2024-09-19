@@ -10,6 +10,7 @@ export function createHTMLfrom9Tail(input: string): string {
         const tokens = new CommonTokenStream(lexer);
         const parser = new NinetailParser(tokens);
         parser.removeErrorListeners();
+        parser.removeParseListeners();
         const tree = parser.program();
 
         class Visitor extends NinetailParserVisitor<string> {

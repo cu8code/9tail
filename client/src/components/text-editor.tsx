@@ -1,12 +1,12 @@
-import { useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
+import useStore from '../lib/store';
 
 export default function Editor() {
-  const [code, setCode] = useState<string>('console.log("Hello, world!");');
+  const { code, updateCode }: any = useStore();
 
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
-      setCode(value);
+      updateCode(value);
     }
   };
 

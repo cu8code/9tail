@@ -1,4 +1,4 @@
-import { ExtendedNode } from './types';
+import { ExtendedNode } from '../types';
 
 interface SelectionSlice {
   selectedNodeId: string | null;

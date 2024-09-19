@@ -1,5 +1,5 @@
-import { ExtendedNode, Parameter } from './types';
-import { createFetchNode, createHookNode, createHttpScrapperNode } from './node';
+import { ExtendedNode } from '../types';
+import { createFetchNode, createHookNode, createHttpScrapperNode } from '../node';
 
 interface NodesSlice {
   nodes: ExtendedNode[];

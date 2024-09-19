@@ -7,7 +7,7 @@ import TextEditor from './components/text-editor.tsx';
 
 const router = createBrowserRouter([
   {
-    path: "/",
+    path: "*",
     element: <App />,
     children: [
       { path: "script", element: <TextEditor /> },

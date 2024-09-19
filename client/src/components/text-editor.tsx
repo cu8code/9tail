@@ -15,7 +15,7 @@ export default function Editor() {
       <MonacoEditor
         height="100%"
         width="100%"
-        language="javascript"
+        language="text"
         theme="vs-dark"
         value={code}
         onChange={handleEditorChange}

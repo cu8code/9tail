@@ -20,7 +20,7 @@ const NodeSelectorPopup: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [selectedType, setSelectedType] = useState<"hook" | "fetch" | "scrapper">('hook');
   const [name, setName] = useState<string>('');
   const [author, setAuthor] = useState<string>('');
-  const [position, setPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
+  const [position, _] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
 
   // Handle node type selection
   const handleSelectType = (type: "hook" | "fetch" | "scrapper") => {

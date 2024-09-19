@@ -5,16 +5,18 @@ import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import Canvas from './components/canvas';
 import TextEditor from './components/text-editor';
 import Project from './components/projects';
+import NodeSelectorPopup from './components/node-selector-popup'; // Import the NodeSelectorPopup component
 
 function App() {
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [isNodeSelectorOpen, setIsNodeSelectorOpen] = useState(false); // State to manage node selector visibility
 
   // Update width and height when the window size changes
   useEffect(() => {
     const updateDimensions = () => {
       const headerHeight = 48; // Assuming header height is 3rem (48px)
       const availableHeight = window.innerHeight - headerHeight;
-      const availableWidth = window.innerWidth * 0.8; // 90% width for canvas
+      const availableWidth = window.innerWidth * 0.8; // 80% width for canvas
       setDimensions({ width: availableWidth, height: availableHeight });
     };
 
@@ -27,16 +29,21 @@ function App() {
 
   return (
     <div className="bg-gray-950 text-white h-screen flex flex-col">
-      <header className='flex items-center w-full h-12 justify-between px-4 bg-gray-800 shadow-md'>
+      <header className='flex flex-col w-full h-12 justify-between px-4 bg-gray-800 shadow-md'>
         <nav className='flex gap-4'>
           <Link to="/" className='flex items-center gap-2'>
             <FaBeer className='text-xl' />
             <span>Project</span>
           </Link>
-          <Link to="/debug" className='flex items-center gap-2'>
+          <div className='flex items-center gap-2 cursor-pointer'
+            onClick={(e) => {
+              e.preventDefault();
+              setIsNodeSelectorOpen(true); // Open the node selector menu
+            }}
+          >
             <FaCog className='text-xl' />
-            <span>Debug</span>
-          </Link>
+            <span>Add Node</span>
+          </div>
           <Link to="/editor" className='flex items-center gap-2'>
             <FaBeer className='text-xl' />
             <span>Editor</span>
@@ -44,32 +51,6 @@ function App() {
           <Link to="/help" className='flex items-center gap-2'>
             <FaQuestionCircle className='text-xl' />
             <span>Help</span>
-          </Link>
-        </nav>
-
-        <nav className='flex gap-4'>
-          <Link to="/editor" className='flex items-center gap-2'>
-            <FaCog className='text-xl' />
-            <span>Editor</span>
-          </Link>
-          <Link to="/script" className='flex items-center gap-2'>
-            <FaBeer className='text-xl' />
-            <span>Script</span>
-          </Link>
-          <Link to="/market" className='flex items-center gap-2'>
-            <FaQuestionCircle className='text-xl' />
-            <span>Market</span>
-          </Link>
-        </nav>
-
-        <nav className='flex gap-4'>
-          <Link to="/run" className='flex items-center gap-2'>
-            <FaBeer className='text-xl' />
-            <span>Run</span>
-          </Link>
-          <Link to="/publish" className='flex items-center gap-2'>
-            <FaQuestionCircle className='text-xl' />
-            <span>Publish</span>
           </Link>
         </nav>
       </header>
@@ -93,6 +74,8 @@ function App() {
           </Panel>
         </PanelGroup>
       </main>
+
+      {isNodeSelectorOpen && <NodeSelectorPopup onClose={() => setIsNodeSelectorOpen(false)} />}
     </div>
   );
 }

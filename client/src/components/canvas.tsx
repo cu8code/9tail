@@ -28,7 +28,7 @@ export default function Canvas({ width, height }: Props) {
   const selectNode = useStore((state: any) => state.selectNode);  // from selectionSlice
 
   const { setEdges } = useReactFlow();
-  const [parameters, setParameters] = useState<Parameter[]>([]);
+  const [_, setParameters] = useState<Parameter[]>([]);
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_, node) => {

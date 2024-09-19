@@ -16,7 +16,7 @@ const nodeTypes : {
 ];
 
 const NodeSelectorPopup: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { addNode } = useStore();
+  const { addNode } : any = useStore();
   const [selectedType, setSelectedType] = useState<"hook" | "fetch" | "scrapper">('hook');
   const [name, setName] = useState<string>('');
   const [author, setAuthor] = useState<string>('');

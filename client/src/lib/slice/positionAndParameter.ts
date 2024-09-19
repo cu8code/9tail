@@ -1,5 +1,5 @@
 import { applyNodeChanges } from '@xyflow/react';
-import { Parameter } from './types';
+import { Parameter } from '../types';
 
 interface PositionAndParameterSlice {
   updateNodePosition: (id: string, x: number, y: number) => void;
